@@ -2,7 +2,10 @@ const cheerio = require('cheerio');
 const Telenode = require('telenode-js');
 const fs = require('fs');
 const config = require('./config.json');
+const path = require('path');
+fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true }); // create once
 
+const safeName = (s) => s.replace(/[\\/:*?"<>|]/g, '_').trim();
 const getYad2Response = async (url) => {
     const requestOptions = {
         method: 'GET',
@@ -42,39 +45,42 @@ const scrapeItemsAndExtractImgUrls = async (url) => {
 }
 
 const checkIfHasNewItem = async (imgUrls, topic) => {
-    const filePath = `./data/${topic}.json`;
-    let savedUrls = [];
+  const filePath = path.join(__dirname, 'data', `${safeName(topic)}.json`);
+  let savedUrls = [];
+
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, '[]'); // fresh file per topic
+  } else {
     try {
-        savedUrls = require(filePath);
+      const raw = fs.readFileSync(filePath, 'utf8');
+      savedUrls = JSON.parse(raw);
     } catch (e) {
-        if (e.code === "MODULE_NOT_FOUND") {
-            fs.mkdirSync('data');
-            fs.writeFileSync(filePath, '[]');
-        } else {
-            console.log(e);
-            throw new Error(`Could not read / create ${filePath}`);
-        }
+      console.log(e);
+      throw new Error(`Could not read / create ${filePath}`);
     }
-    let shouldUpdateFile = false;
-    savedUrls = savedUrls.filter(savedUrl => {
-        shouldUpdateFile = true;
-        return imgUrls.includes(savedUrl);
-    });
-    const newItems = [];
-    imgUrls.forEach(url => {
-        if (!savedUrls.includes(url)) {
-            savedUrls.push(url);
-            newItems.push(url);
-            shouldUpdateFile = true;
-        }
-    });
-    if (shouldUpdateFile) {
-        const updatedUrls = JSON.stringify(savedUrls, null, 2);
-        fs.writeFileSync(filePath, updatedUrls);
-        await createPushFlagForWorkflow();
+  }
+
+  let shouldUpdateFile = false;
+  savedUrls = savedUrls.filter(u => {
+    shouldUpdateFile = true;
+    return imgUrls.includes(u);
+  });
+
+  const newItems = [];
+  for (const url of imgUrls) {
+    if (!savedUrls.includes(url)) {
+      savedUrls.push(url);
+      newItems.push(url);
+      shouldUpdateFile = true;
     }
-    return newItems;
-}
+  }
+
+  if (shouldUpdateFile) {
+    fs.writeFileSync(filePath, JSON.stringify(savedUrls, null, 2));
+    await createPushFlagForWorkflow();
+  }
+  return newItems;
+};
 
 const createPushFlagForWorkflow = () => {
     fs.writeFileSync("push_me", "")
