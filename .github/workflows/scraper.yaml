@@ -26,8 +26,8 @@ jobs:
 
       - name: Run scraper
         run: |
-          export API_TOKEN=${{ secrets.API_TOKEN }}
-          export CHAT_ID=${{ secrets.CHAT_ID }}
+          export API_TOKEN=${{ secrets.TELEGRAMAPITOKEN }}
+          export CHAT_ID=${{ secrets.CHATID }}
           yarn scrape
 
       - name: Push new json data if needed
